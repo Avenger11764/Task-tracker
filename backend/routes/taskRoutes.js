@@ -1,4 +1,6 @@
 import express from 'express';
+import Task from '../models/Task.js';
+import { getDBStatus } from '../config/db.js';
 
 const router = express.Router();
 
@@ -23,8 +25,8 @@ let memoryTasks = [
   },
   {
     _id: 'mem_3',
-    title: 'Archive finished tasks',
-    description: 'Archive tasks by completing them. Navigate to the Archive page to restore or delete them.',
+    title: 'Connect to MongoDB Database',
+    description: 'Ensure a MongoDB instance is running at mongodb://127.0.0.1:27017 to persist data automatically.',
     status: 'completed',
     priority: 'low',
     dueDate: new Date().toISOString(),
@@ -60,43 +62,71 @@ const validateTask = (data) => {
 
 router.get('/status', (req, res) => {
   res.json({
-    connected: false,
-    mode: 'Local Store'
+    connected: getDBStatus(),
+    mode: getDBStatus() ? 'MongoDB' : 'In-Memory Fallback'
   });
 });
 
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const { status, priority, search, sortBy } = req.query;
-  let tasks = [...memoryTasks];
 
-  if (status) {
-    tasks = tasks.filter(t => t.status === status);
-  }
-  if (priority) {
-    tasks = tasks.filter(t => t.priority === priority);
-  }
-  if (search) {
-    const s = search.toLowerCase();
-    tasks = tasks.filter(t => t.title.toLowerCase().includes(s) || (t.description && t.description.toLowerCase().includes(s)));
-  }
+  if (getDBStatus()) {
+    try {
+      let query = {};
+      if (status) query.status = status;
+      if (priority) query.priority = priority;
+      if (search) {
+        query.title = { $regex: search, $options: 'i' };
+      }
 
-  if (sortBy === 'dueDate') {
-    tasks.sort((a, b) => {
-      if (!a.dueDate) return 1;
-      if (!b.dueDate) return -1;
-      return new Date(a.dueDate) - new Date(b.dueDate);
-    });
-  } else if (sortBy === 'priority') {
-    const priorityOrder = { high: 3, medium: 2, low: 1 };
-    tasks.sort((a, b) => priorityOrder[b.priority] - priorityOrder[a.priority]);
+      let sortOptions = { createdAt: -1 };
+      if (sortBy === 'dueDate') {
+        sortOptions = { dueDate: 1 };
+      }
+
+      let tasks = await Task.find(query).sort(sortOptions);
+
+      if (sortBy === 'priority') {
+        const priorityOrder = { high: 3, medium: 2, low: 1 };
+        tasks.sort((a, b) => priorityOrder[b.priority] - priorityOrder[a.priority]);
+      }
+
+      res.json(tasks);
+    } catch (error) {
+      res.status(500).json({ message: 'Error retrieving tasks', error: error.message });
+    }
   } else {
-    tasks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  }
+    let tasks = [...memoryTasks];
 
-  res.json(tasks);
+    if (status) {
+      tasks = tasks.filter(t => t.status === status);
+    }
+    if (priority) {
+      tasks = tasks.filter(t => t.priority === priority);
+    }
+    if (search) {
+      const s = search.toLowerCase();
+      tasks = tasks.filter(t => t.title.toLowerCase().includes(s) || (t.description && t.description.toLowerCase().includes(s)));
+    }
+
+    if (sortBy === 'dueDate') {
+      tasks.sort((a, b) => {
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return new Date(a.dueDate) - new Date(b.dueDate);
+      });
+    } else if (sortBy === 'priority') {
+      const priorityOrder = { high: 3, medium: 2, low: 1 };
+      tasks.sort((a, b) => priorityOrder[b.priority] - priorityOrder[a.priority]);
+    } else {
+      tasks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    }
+
+    res.json(tasks);
+  }
 });
 
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { title, description, status, priority, dueDate } = req.body;
   const { isValid, errors } = validateTask(req.body);
 
@@ -104,20 +134,36 @@ router.post('/', (req, res) => {
     return res.status(400).json({ message: 'Validation failed', errors });
   }
 
-  const newMemoryTask = {
-    _id: `mem_${Date.now()}`,
-    title: title.trim(),
-    description: description ? description.trim() : '',
-    status: status || 'pending',
-    priority: priority || 'medium',
-    dueDate: dueDate || null,
-    createdAt: new Date().toISOString()
-  };
-  memoryTasks.push(newMemoryTask);
-  res.status(201).json(newMemoryTask);
+  if (getDBStatus()) {
+    try {
+      const newTask = new Task({
+        title,
+        description,
+        status: status || 'pending',
+        priority: priority || 'medium',
+        dueDate
+      });
+      const savedTask = await newTask.save();
+      res.status(201).json(savedTask);
+    } catch (error) {
+      res.status(500).json({ message: 'Error creating task', error: error.message });
+    }
+  } else {
+    const newMemoryTask = {
+      _id: `mem_${Date.now()}`,
+      title: title.trim(),
+      description: description ? description.trim() : '',
+      status: status || 'pending',
+      priority: priority || 'medium',
+      dueDate: dueDate || null,
+      createdAt: new Date().toISOString()
+    };
+    memoryTasks.push(newMemoryTask);
+    res.status(201).json(newMemoryTask);
+  }
 });
 
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   const { title, description, status, priority, dueDate } = req.body;
   const { isValid, errors } = validateTask(req.body);
 
@@ -125,32 +171,60 @@ router.put('/:id', (req, res) => {
     return res.status(400).json({ message: 'Validation failed', errors });
   }
 
-  const taskIndex = memoryTasks.findIndex(t => t._id === req.params.id);
-  if (taskIndex === -1) {
-    return res.status(404).json({ message: 'Task not found' });
+  if (getDBStatus()) {
+    try {
+      const updatedTask = await Task.findByIdAndUpdate(
+        req.params.id,
+        { title, description, status, priority, dueDate },
+        { new: true, runValidators: true }
+      );
+      if (!updatedTask) {
+        return res.status(404).json({ message: 'Task not found' });
+      }
+      res.json(updatedTask);
+    } catch (error) {
+      res.status(500).json({ message: 'Error updating task', error: error.message });
+    }
+  } else {
+    const taskIndex = memoryTasks.findIndex(t => t._id === req.params.id);
+    if (taskIndex === -1) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    const updatedMemoryTask = {
+      ...memoryTasks[taskIndex],
+      title: title.trim(),
+      description: description ? description.trim() : '',
+      status: status || memoryTasks[taskIndex].status,
+      priority: priority || memoryTasks[taskIndex].priority,
+      dueDate: dueDate || null
+    };
+
+    memoryTasks[taskIndex] = updatedMemoryTask;
+    res.json(updatedMemoryTask);
   }
-
-  const updatedMemoryTask = {
-    ...memoryTasks[taskIndex],
-    title: title.trim(),
-    description: description ? description.trim() : '',
-    status: status || memoryTasks[taskIndex].status,
-    priority: priority || memoryTasks[taskIndex].priority,
-    dueDate: dueDate || null
-  };
-
-  memoryTasks[taskIndex] = updatedMemoryTask;
-  res.json(updatedMemoryTask);
 });
 
-router.delete('/:id', (req, res) => {
-  const taskIndex = memoryTasks.findIndex(t => t._id === req.params.id);
-  if (taskIndex === -1) {
-    return res.status(404).json({ message: 'Task not found' });
+router.delete('/:id', async (req, res) => {
+  if (getDBStatus()) {
+    try {
+      const deletedTask = await Task.findByIdAndDelete(req.params.id);
+      if (!deletedTask) {
+        return res.status(404).json({ message: 'Task not found' });
+      }
+      res.json({ message: 'Task deleted successfully', id: req.params.id });
+    } catch (error) {
+      res.status(500).json({ message: 'Error deleting task', error: error.message });
+    }
+  } else {
+    const taskIndex = memoryTasks.findIndex(t => t._id === req.params.id);
+    if (taskIndex === -1) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+    const deletedId = memoryTasks[taskIndex]._id;
+    memoryTasks.splice(taskIndex, 1);
+    res.json({ message: 'Task deleted successfully', id: deletedId });
   }
-  const deletedId = memoryTasks[taskIndex]._id;
-  memoryTasks.splice(taskIndex, 1);
-  res.json({ message: 'Task deleted successfully', id: deletedId });
 });
 
 export default router;

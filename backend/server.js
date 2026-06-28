@@ -1,7 +1,16 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import dns from 'dns';
+import { connectDB } from './config/db.js';
 import taskRoutes from './routes/taskRoutes.js';
+
+dns.setDefaultResultOrder('ipv4first');
+try {
+  dns.setServers(['8.8.8.8', '8.8.4.4']);
+} catch (e) {
+  console.warn('Could not override DNS servers:', e.message);
+}
 
 dotenv.config();
 
@@ -22,6 +31,11 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'An internal server error occurred', error: err.message });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+const startServer = async () => {
+  await connectDB();
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+};
+
+startServer();
