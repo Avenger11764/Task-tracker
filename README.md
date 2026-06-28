@@ -1,28 +1,26 @@
 # Chronos - Workflow Management Suite
 
-Chronos is a professional task management and workflow tracking platform designed with high information density, low latency interaction, and a modern clean design. Powered by the MERN stack (MongoDB, Express, React, Node.js), Chronos offers a highly interactive experience for organizing day-to-day tasks, projecting milestones on a project timeline, and auditing progress with statistical analytics.
+Chronos is a professional task management and workflow tracking platform designed with high information density, low latency interaction, and a modern clean design. Powered by Node.js, Express, and React, Chronos offers a highly interactive experience for organizing day-to-day tasks, projecting milestones on a project timeline, and auditing progress with statistical analytics.
 
 ## Features
 
-- **Constellation Canvas Background**: A interactive network layout on the landing page that dynamically responds to cursor movement.
+- **Constellation Canvas Background**: An interactive network layout on the landing page that dynamically responds to cursor movement.
 - **Active Task Stream**: Create, edit, search, filter, and sort tasks with high responsiveness. Update task status inline using simple interactive controls.
 - **Milestone Archive View**: Archive completed milestones dynamically, with quick-restore checkboxes and permanent deletion tools.
 - **Statistical Analytics**: Priority distribution graphs, status counters, and work completion rating calculators.
-- **Dual Connection Engine**: Automatic runtime switch to a local in-memory fallback state if a remote MongoDB Atlas database cluster becomes unreachable.
-- **Node Network Fixes**: Pre-configured DNS query result priorities forcing IPv4 execution to prevent Atlas SRV resolution blocks.
+- **Local Memory Store**: Highly responsive in-memory database store, running with zero external database engine dependencies.
 
 ## Tech Stack
 
 - **Frontend**: React 18, Vite, Tailwind CSS, Lucide Icons
-- **Backend**: Node.js, Express.js, Mongoose
-- **Database**: MongoDB (Local or Atlas Cloud)
+- **Backend**: Node.js, Express.js
+- **Database**: Local In-Memory Store
 
 ## Getting Started
 
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) (version 18 or above recommended)
-- [MongoDB](https://www.mongodb.com/) (local server or Atlas cluster URL)
 
 ### Installation
 
@@ -38,13 +36,7 @@ Chronos is a professional task management and workflow tracking platform designe
    npm install
    ```
 
-3. Configure environment variables in `backend/.env`:
-   ```env
-   PORT=5000
-   MONGODB_URI=your_mongodb_connection_string
-   ```
-
-4. Install frontend dependencies:
+3. Install frontend dependencies:
    ```bash
    cd ../frontend
    npm install
