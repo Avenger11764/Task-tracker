@@ -7,7 +7,7 @@ import {
   Inbox, AlignLeft, Info, BarChart3, CalendarDays, RefreshCw, Archive
 } from 'lucide-react';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 function ConstellationCanvas() {
   const canvasRef = useRef(null);
